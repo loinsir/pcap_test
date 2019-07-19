@@ -1,43 +1,7 @@
 #include <pcap.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <arpa/inet.h>
-
-#define eth_hdr_len 14
-#define ip_hdr_len 40
-
-struct ETH_HDR {
-    u_char dst_MAC[6];         //6byte
-    u_char src_MAC[6];         //6byte
-    u_short type;              //2byte
-};
-
-struct IP_HDR {
-    u_char hdr_len :4;            //     using bit field
-    u_char Version :4;
-    u_char TOS;
-    u_short total_len;
-    u_short id;
-    u_short flag :3;
-    u_short frag_offset :13;
-    u_char TTL;
-    u_char protocol;
-    u_short hdr_checksum;
-    u_char src_ip_addr[4];
-    u_char dst_ip_addr[4];
-};
-
-struct TCP_HDR {
-    u_short src_port;
-    u_short dst_port;
-    u_int32_t seqNO;
-    u_int32_t ackNO;
-
-};
-
-void print_packet_info(const u_char *pckt);
-void print_MAC(const u_char *data);
-void print_IP(const u_char *data);
+#include <my_pckt.h>
 
 void usage() {
   printf("syntax: pcap_test <interface>\n");
@@ -45,13 +9,13 @@ void usage() {
 }
 
 int main(int argc, char* argv[]) {
-//  if (argc != 2) {  // Check argument.
+//  if (argc != 2) {             // Check argument.
 //    usage();
 //    return -1;
 //  }
 
-    char* dev = "ens33";
-  /*char* dev = argv[1];*/         // device name
+//  char* dev = argv[1];         // device name
+  char* dev = "ens33";
   char errbuf[PCAP_ERRBUF_SIZE];
   pcap_t* handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
   if (handle == NULL) {
@@ -66,7 +30,9 @@ int main(int argc, char* argv[]) {
     if (res == 0) continue;
     if (res == -1 || res == -2) break;
     printf("%u bytes captured\n", header->caplen);
+    printf("==============================================\n");
     print_packet_info(packet);                     //print packet information
+    printf("==============================================\n");
   }
 
   pcap_close(handle);
@@ -75,12 +41,23 @@ int main(int argc, char* argv[]) {
 
 void print_packet_info(const u_char *pckt){
     ETH_HDR *eth_hdr;
-    eth_hdr = const_cast<ETH_HDR*>(reinterpret_cast<const ETH_HDR*>(pckt));
+    eth_hdr = const_cast<ETH_HDR*>(reinterpret_cast<const ETH_HDR*>(pckt)); //cast to ethernet header
     u_short ether_type = ntohs(eth_hdr->type);           //switch byteOrder network to host
 
-    if (ether_type == 0x0800) {               //if ethernet type is IP
-        //print destination MAC address
-        printf("==============================================\n");
+    IP_HDR *ip_hdr;
+    ip_hdr = const_cast<IP_HDR*>(               //cast data to IP header
+                reinterpret_cast<const IP_HDR*>
+                (&pckt[eth_hdr_len]));
+    int ip_hdr_len = ip_hdr->hdr_len * 4;
+
+    TCP_HDR *tcp_hdr;
+    tcp_hdr = const_cast<TCP_HDR*>(
+                reinterpret_cast<const TCP_HDR*>
+                (&pckt[eth_hdr_len + ip_hdr_len])); //cast data to TCP header
+    uint8_t ip_type = ip_hdr->protocol;
+
+
+    if (ether_type == eth_typefield_val_IP && ip_type == IP_typefield_val_TCP) {   //checking packet type
         printf("DST_MAC: ");
         print_MAC(eth_hdr->dst_MAC);
 
@@ -88,15 +65,15 @@ void print_packet_info(const u_char *pckt){
         printf("SRC_MAC: ");
         print_MAC(eth_hdr->src_MAC);
 
-        IP_HDR *ip_hdr;
-        ip_hdr = const_cast<IP_HDR*>(reinterpret_cast<const IP_HDR*>(&pckt[eth_hdr_len]));
         printf("SRC_IP: ");
         print_IP(ip_hdr->src_ip_addr);
         printf("DST_IP: ");
         print_IP(ip_hdr->dst_ip_addr);
-        printf("IP_ver: ");
-        printf("%d\n", ip_hdr->version);
 
+        printf("Total len: ");
+        printf("%d\n", ntohs(ip_hdr->total_len));
+
+        printf("SRC_PORT: %d\nDST_PORT: %d\n", ntohs(tcp_hdr->src_port), ntohs(tcp_hdr->dst_port));
     }
 }
 
