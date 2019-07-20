@@ -29,9 +29,9 @@ int main(int argc, char* argv[]) {
     int res = pcap_next_ex(handle, &header, &packet);
     if (res == 0) continue;
     if (res == -1 || res == -2) break;
-    printf("%u bytes captured\n", header->caplen);
     printf("==============================================\n");
-    print_packet_info(packet);                     //print packet information
+    printf("%u bytes captured\n", header->caplen);
+    print_packet_info(packet, header->caplen);                     //print packet information
     printf("==============================================\n");
   }
 
@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
-void print_packet_info(const u_char *pckt){
+void print_packet_info(const u_char *pckt, unsigned int total_pckt_len){
     ETH_HDR *eth_hdr;
     eth_hdr = const_cast<ETH_HDR*>(reinterpret_cast<const ETH_HDR*>(pckt)); //cast to ethernet header
     u_short ether_type = ntohs(eth_hdr->type);           //switch byteOrder network to host
@@ -49,7 +49,8 @@ void print_packet_info(const u_char *pckt){
                 reinterpret_cast<const IP_HDR*>
                 (&pckt[eth_hdr_len]));
     int ip_hdr_len = ip_hdr->hdr_len * 4;
-
+//    int total_pckt_len = ntohs(ip_hdr->total_len) + eth_hdr_len;
+    total_pckt_len = static_cast<int>(total_pckt_len);
     TCP_HDR *tcp_hdr;
     tcp_hdr = const_cast<TCP_HDR*>(
                 reinterpret_cast<const TCP_HDR*>
@@ -71,9 +72,16 @@ void print_packet_info(const u_char *pckt){
         print_IP(ip_hdr->dst_ip_addr);
 
         printf("Total len: ");
-        printf("%d\n", ntohs(ip_hdr->total_len));
+        printf("%d\n", total_pckt_len);
 
         printf("SRC_PORT: %d\nDST_PORT: %d\n", ntohs(tcp_hdr->src_port), ntohs(tcp_hdr->dst_port));
+
+        int pckt_data_idx = eth_hdr_len + ip_hdr_len + (tcp_hdr->offset) * 4;
+        printf("total_hdr_len: ");
+        printf("%d\n", pckt_data_idx);
+
+        printf("TCP DATA(maximum 10byte): ");
+        print_DATA(&pckt[pckt_data_idx], total_pckt_len - pckt_data_idx);
     }
 }
 
@@ -91,3 +99,9 @@ void print_IP(const u_char *data){
     }
 }
 
+void print_DATA(const u_char *data, int data_len){
+    for (int idx = 0 ; idx < data_len && idx < 10 ; idx++) {
+        printf("%02X ", data[idx]);
+    }
+    printf("\n");
+}
